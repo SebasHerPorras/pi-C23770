@@ -1,0 +1,21 @@
+# Ignorar todos los archivos de salida (ejecutables)
+*.out
+
+# Ignorar todos los archivos de objeto
+*.o
+
+# Ignorar todos los directorios y archivos temporales generados
+*.a
+*.so
+*.d
+
+# Ignorar los directorios de compilación
+build/
+bin/
+obj/
+debug/
+release/
+
+# Ignorar archivos específicos de sistemas de desarrollo
+*.log
+*.tmp
