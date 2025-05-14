@@ -1,0 +1,4 @@
+conectar el swtich a la compu con cables a la pared con el adaptador 
+sudo minicom -s en la terminal
+configurar el puerto en el apartado de serial como lo tenia el profe
+enable para conectar y write erase para borrar, confirmar y eliminar de fabrica
