@@ -18,6 +18,8 @@
 
 #define UserStackSize		1024 	// increase this as necessary!
 
+int VirtualToPhysical(int virtualAddr, TranslationEntry* pageTable); // this function converts virtual addresses to physical addresses Sebas implementation
+void LoadSegment(OpenFile* executable, int virtualAddr, int fileOffset, int size, TranslationEntry* pageTable, int numPages); // this function loads a segment from the executable into memory
 class AddrSpace {
   public:
     AddrSpace(OpenFile *executable);	// Create an address space,
@@ -30,6 +32,8 @@ class AddrSpace {
 
     void SaveState();			// Save/restore address space-specific
     void RestoreState();		// info on a context switch 
+    unsigned int getNumPages() { return numPages; } // this function returns the number of pages in the address space
+    TranslationEntry* getPageTable() { return pageTable; } // this function returns the page table of the address space
 
   private:
     TranslationEntry *pageTable;	// Assume linear page table translation

@@ -67,7 +67,7 @@ class Semaphore {
 
 class Lock {
   public:
-    Lock(const char* debugName);  		// initialize lock to be FREE
+    Lock(char* debugName);  		// initialize lock to be FREE
     ~Lock();				// deallocate lock
     char* getName() { return name; }	// debugging assist
 
@@ -81,6 +81,11 @@ class Lock {
 
   private:
     char* name;				// for debugging
+    Semaphore* mutex;			// semaphore to implement the lock
+    Thread* holder;			// thread holding the lock
+          // (or NULL if no one is holding it)
+    
+          
     // plus some other stuff you'll need to define
 };
 

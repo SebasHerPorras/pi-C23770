@@ -31,6 +31,10 @@ extern Timer *timer;				// the hardware alarm clock
 
 #ifdef USER_PROGRAM
 #include "machine.h"
+#include "synch.h"
+#include "bitmap.h"
+extern Lock* memoryLock;
+extern BitMap *MiMapa; 		// bitmap for the page table Sebas implementation
 extern Machine* machine;	// user program memory and registers
 #endif
 

@@ -122,29 +122,33 @@ Semaphore::Destroy()
 // Dummy functions -- so we can compile our later assignments 
 // Note -- without a correct implementation of Condition::Wait(), 
 // the test case in the network assignment won't work!
-Lock::Lock(const char* debugName) {
-
+// Sebas implementation
+//----------------------------------------------------------------------
+Lock::Lock( char* debugName) {
+    name = debugName;
+    mutex = new Semaphore("lockSem", 1);
+    holder = NULL;
 }
-
 
 Lock::~Lock() {
-
+    delete mutex;
 }
-
 
 void Lock::Acquire() {
-
+    mutex->P();
+    holder = currentThread;
 }
-
 
 void Lock::Release() {
-
+    ASSERT(isHeldByCurrentThread());
+    holder = NULL;
+    mutex->V();
 }
-
 
 bool Lock::isHeldByCurrentThread() {
-   return false;
+    return holder == currentThread;
 }
+
 
 
 Condition::Condition(const char* debugName) {

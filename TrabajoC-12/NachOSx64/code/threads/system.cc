@@ -34,6 +34,8 @@ SynchDisk   *synchDisk;
 
 #ifdef USER_PROGRAM	// requires either FILESYS or FILESYS_STUB
 Machine *machine;	// user program memory and registers
+BitMap *MiMapa; 		// bitmap for the page table Sebas implementation
+Lock* memoryLock;	// lock for the memory manager
 #endif
 
 #ifdef NETWORK
@@ -178,6 +180,8 @@ Initialize(int argc, char **argv)
     
 #ifdef USER_PROGRAM
     machine = new Machine(debugUserProg);	// this must come first
+    MiMapa = new BitMap(NumPhysPages);	// bitmap for the page table Sebas implementation
+    memoryLock = new Lock("memoryLock");	// lock for the memory manager
 #endif
 
 #ifdef FILESYS

@@ -39,8 +39,34 @@ void NachOS_Halt() {		// System call 0
 /*
  *  System call interface: void Exit( int )
  */
-void NachOS_Exit() {		// System call 1
+int cont = 0;
+void NachOS_Exit() {
+   int status = machine->ReadRegister(4);    // código de salida
+   DEBUG('u', "Exit system call with status %d\n", status);
+
+   AddrSpace* space = (AddrSpace*)currentThread->space;
+   auto* pageTable = space->getPageTable();
+   unsigned numPages = space->getNumPages();
+
+   // Liberar páginas asignadas en el bitmap con exclusión mutua
+   for (unsigned i = 0; i < numPages; i++) {
+      memoryLock->Acquire();
+      MiMapa->Clear(pageTable[i].physicalPage);
+      memoryLock->Release();
+   }
+
+   printf("Thread %s exiting with status %d\n", currentThread->getName(), status);
+
+   // Avanzar el PC para evitar bucles infinitos de syscalls
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   // No es necesario avanzar NextPCReg, solo PCReg y PrevPCReg.
+   // El bucle infinito suele ocurrir si no se avanza el PC correctamente.
+   // Elimina la línea que avanza NextPCReg.
+
+   currentThread->Finish();
 }
+
 
 
 /*
@@ -74,8 +100,53 @@ void NachOS_Open() {		// System call 5
 /*
  *  System call interface: OpenFileId Write( char *, int, OpenFileId )
  */
-void NachOS_Write() {		// System call 6
+void NachOS_Write() {
+   int addr = machine->ReadRegister(4);    // dirección del buffer
+   int size = machine->ReadRegister(5);    // cuántos bytes
+   int file = machine->ReadRegister(6);    // 1 = stdout, 2 = stderr
+
+   DEBUG('u', "Write system call\n");
+
+   if (file == 1 || file == 2) {
+       char buffer[512];  // Tamaño máximo razonable
+       int val;
+
+       for (int i = 0; i < size && i < 511; i++) {
+           if (machine->ReadMem(addr + i, 1, &val)) {
+               buffer[i] = (char) val;
+           } else {
+               buffer[i] = '?';  // fallback si falla lectura
+           }
+       }
+       buffer[size < 511 ? size : 511] = '\0';
+       printf("%s", buffer);
+   } else {
+       DEBUG('u', "Write syscall: Unsupported file descriptor %d\n", file);
+   }
+   /* Funcion que escribe todooooo pero tests tiene un blucle infinito
+   int addr = machine->ReadRegister(4);    // dirección del buffer en memoria usuario
+   int size = machine->ReadRegister(5);    // tamaño a escribir
+   int file = machine->ReadRegister(6);    // descriptor de archivo (1 para stdout, 2 para stderr)
+
+   char buffer[512];
+   int i;
+   int ch;
+
+   for (i = 0; i < size && i < 511; i++) {
+       machine->ReadMem(addr + i, 1, &ch);
+       buffer[i] = (char) ch;
+   }
+   buffer[i] = '\0';
+
+   if (file == 1 || file == 2) {  // stdout o stderr
+       printf("%s", buffer);
+   } else {
+       // Por ahora, no soportamos otros archivos
+       DEBUG('u', "Write syscall: Unsupported file descriptor %d\n", file);
+   }
+   */
 }
+
 
 
 /*
@@ -278,8 +349,10 @@ ExceptionHandler(ExceptionType which)
                 NachOS_Exit();
                 break;
              case SC_Exec:		// System call # 2
-                NachOS_Exec();
-                break;
+               DEBUG('u', "SC_Exit recibido\n");
+               NachOS_Exit();
+               break;   
+            
              case SC_Join:		// System call # 3
                 NachOS_Join();
                 break;

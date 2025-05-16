@@ -27,6 +27,33 @@
 //	endian machine, and we're now running on a big endian machine.
 //----------------------------------------------------------------------
 
+// this function converts virtual addresses to physical addresses Sebas implementation
+int VirtualToPhysical(int virtualAddr, TranslationEntry* pageTable) {
+    int vpn = virtualAddr / PageSize;
+    int offset = virtualAddr % PageSize;
+    int ppn = pageTable[vpn].physicalPage;
+    return ppn * PageSize + offset;
+}
+void LoadSegment(OpenFile* executable, int virtualAddr, int fileOffset, int size, TranslationEntry* pageTable) {
+    char buffer[PageSize];
+
+    while (size > 0) {
+        int toRead = PageSize - (virtualAddr % PageSize);
+        if (toRead > size) toRead = size;
+
+        executable->ReadAt(buffer, toRead, fileOffset);
+
+        int physAddr = VirtualToPhysical(virtualAddr, pageTable);
+        bcopy(buffer, &machine->mainMemory[physAddr], toRead);
+
+        virtualAddr += toRead;
+        fileOffset += toRead;
+        size -= toRead;
+    }
+}
+
+
+
 static void 
 SwapHeader (NoffHeader *noffH)
 {
@@ -83,35 +110,62 @@ AddrSpace::AddrSpace(OpenFile *executable)
     DEBUG('a', "Initializing address space, num pages %d, size %d\n", 
 					numPages, size);
 // first, set up the translation 
+    
     pageTable = new TranslationEntry[numPages];
     for (i = 0; i < numPages; i++) {
-	pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-	pageTable[i].physicalPage = i;
-	pageTable[i].valid = true;
-	pageTable[i].use = false;
-	pageTable[i].dirty = false;
-	pageTable[i].readOnly = false;  // if the code segment was entirely on 
-					// a separate page, we could set its 
-					// pages to be read-only
+        memoryLock->Acquire();             // proteger acceso al bitmap
+        int frame = MiMapa->Find();        // buscar una página física libre
+        memoryLock->Release();
+        
+        ASSERT(frame != -1);               // si no hay memoria suficiente, abortar
+    
+        pageTable[i].virtualPage = i;
+        pageTable[i].physicalPage = frame;
+        pageTable[i].valid = true;
+        pageTable[i].use = false;
+        pageTable[i].dirty = false;
+        pageTable[i].readOnly = false;
     }
+    
     
 // zero out the entire address space, to zero the unitialized data segment 
 // and the stack segment
-    bzero(machine->mainMemory, size);
+// we need to increase the size to leave room for the stack
+    // Limpiar solo las páginas de datos no inicializados y pila
+    unsigned totalSize = noffH.code.size + noffH.initData.size + noffH.uninitData.size + UserStackSize;
+    unsigned totalPages = divRoundUp(totalSize, PageSize);
 
-// then, copy in the code and data segments into memory
+    for (unsigned i = 0; i < totalPages; i++) {
+        unsigned pageStart = i * PageSize;
+
+        bool isCodePage = (pageStart >= noffH.code.virtualAddr) && (pageStart < noffH.code.virtualAddr + noffH.code.size);
+        bool isDataPage = (pageStart >= noffH.initData.virtualAddr) && (pageStart < noffH.initData.virtualAddr + noffH.initData.size);
+
+        if (!isCodePage && !isDataPage) {
+            int physPage = pageTable[i].physicalPage;
+            bzero(&machine->mainMemory[physPage * PageSize], PageSize);
+        }
+    }
+
+
+    // then, copy in the code and data segments into memory
     if (noffH.code.size > 0) {
-        DEBUG('a', "Initializing code segment, at 0x%x, size %d\n", 
-			noffH.code.virtualAddr, noffH.code.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.code.virtualAddr]),
-			noffH.code.size, noffH.code.inFileAddr);
+        DEBUG('a', "Loading code segment, size %d\n", noffH.code.size);
+        LoadSegment(executable, noffH.code.virtualAddr, noffH.code.inFileAddr,
+                    noffH.code.size, pageTable);
+        printf("from::Addrspace, finished loading code segment, virtual to physical\n");
     }
+
     if (noffH.initData.size > 0) {
-        DEBUG('a', "Initializing data segment, at 0x%x, size %d\n", 
-			noffH.initData.virtualAddr, noffH.initData.size);
-        executable->ReadAt(&(machine->mainMemory[noffH.initData.virtualAddr]),
-			noffH.initData.size, noffH.initData.inFileAddr);
+        DEBUG('a', "Loading initData segment, size %d\n", noffH.initData.size);
+        LoadSegment(executable, noffH.initData.virtualAddr, noffH.initData.inFileAddr,
+                    noffH.initData.size, pageTable);
+        printf("from::Addrspace, finished loading initData segment, virtual to physical\n");
     }
+
+    // printf("AddrSpace::AddrSpace: %d pages allocated\n", numPages);
+    printf("\nfrom::Addrspace, finished loading memory pages\n");
+   
 
 }
 
