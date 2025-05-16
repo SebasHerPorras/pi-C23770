@@ -123,6 +123,12 @@ void NachOS_Write() {
    } else {
        DEBUG('u', "Write syscall: Unsupported file descriptor %d\n", file);
    }
+   // Avanzar el PC para evitar bucles infinitos de syscalls
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   // sumar 4 al next pc
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+
    /* Funcion que escribe todooooo pero tests tiene un blucle infinito
    int addr = machine->ReadRegister(4);    // dirección del buffer en memoria usuario
    int size = machine->ReadRegister(5);    // tamaño a escribir
