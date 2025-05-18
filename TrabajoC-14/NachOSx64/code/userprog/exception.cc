@@ -93,65 +93,110 @@ void NachOS_Create() {		// System call 4
 /*
  *  System call interface: OpenFileId Open( char * )
  */
-void NachOS_Open() {		// System call 5
+bool copyStringFromMachine(int from, char *to, unsigned size) {
+   unsigned i = 0;
+   int ch;
+
+   while (i < size - 1) {
+       machine->ReadMem(from + i, 1, &ch);
+       to[i] = (char) ch;
+       if (to[i] == '\0') break;
+       i++;
+   }
+   to[i] = '\0';
+   return true;
 }
+
+void NachOS_Open() {
+   int userPtr = machine->ReadRegister(4);
+   char filename[256];
+
+   if (!copyStringFromMachine(userPtr, filename, 256)) {
+       machine->WriteRegister(2, -1);
+   } else {
+       OpenFile* file = fileSystem->Open(filename);
+       if (file == NULL) {
+           machine->WriteRegister(2, -1);
+       } else {
+           int index = openFilesTable->Open(file);
+           if (index == -1) {
+               delete file;
+               machine->WriteRegister(2, -1);
+           } else {
+               machine->WriteRegister(2, index);
+           }
+       }
+   }
+
+   // Avanzar el PC SIEMPRE
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+}
+
+
 
 
 /*
  *  System call interface: OpenFileId Write( char *, int, OpenFileId )
  */
 void NachOS_Write() {
-   int addr = machine->ReadRegister(4);    // dirección del buffer
-   int size = machine->ReadRegister(5);    // cuántos bytes
-   int file = machine->ReadRegister(6);    // 1 = stdout, 2 = stderr
+   int addr = machine->ReadRegister(4);
+   int size = machine->ReadRegister(5);
+   int fd = machine->ReadRegister(6);
 
-   DEBUG('u', "Write system call\n");
+   DEBUG('u', "Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
 
-   if (file == 1 || file == 2) {
-       char buffer[512];  // Tamaño máximo razonable
-       int val;
-
-       for (int i = 0; i < size && i < 511; i++) {
-           if (machine->ReadMem(addr + i, 1, &val)) {
-               buffer[i] = (char) val;
-           } else {
-               buffer[i] = '?';  // fallback si falla lectura
-           }
-       }
-       buffer[size < 511 ? size : 511] = '\0';
-       printf("%s", buffer);
-   } else {
-       DEBUG('u', "Write syscall: Unsupported file descriptor %d\n", file);
+   if (size < 0) {
+       machine->WriteRegister(2, -1);
+       // Avanzar PC
+       machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+       machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+       machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+       return;
    }
-   // Avanzar el PC para evitar bucles infinitos de syscalls
+
+   int bytesToWrite = (size < 511) ? size : 511;
+   char buffer[512];
+
+   for (int i = 0; i < bytesToWrite; i++) {
+       int val;
+       if (!machine->ReadMem(addr + i, 1, &val)) {
+           machine->WriteRegister(2, -1);
+           // Avanzar PC
+           machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+           machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+           machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+           return;
+       }
+       buffer[i] = (char)val;
+   }
+   buffer[bytesToWrite] = '\0';
+
+   if (fd == 1 || fd == 2) {
+       printf("%.*s", bytesToWrite, buffer);
+       machine->WriteRegister(2, bytesToWrite);
+   } else {
+       OpenFile* file = nullptr;
+       if (fd >= 0) {
+           file = openFilesTable->getOpenFile(fd);
+       }
+
+       if (file == nullptr) {
+           DEBUG('u', "Write syscall: Descriptor inválido %d\n", fd);
+           machine->WriteRegister(2, -1);
+       } else {
+           int written = file->Write(buffer, bytesToWrite);
+           machine->WriteRegister(2, written);
+       }
+   }
+
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
-   // sumar 4 al next pc
    machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
-
-   /* Funcion que escribe todooooo pero tests tiene un blucle infinito
-   int addr = machine->ReadRegister(4);    // dirección del buffer en memoria usuario
-   int size = machine->ReadRegister(5);    // tamaño a escribir
-   int file = machine->ReadRegister(6);    // descriptor de archivo (1 para stdout, 2 para stderr)
-
-   char buffer[512];
-   int i;
-   int ch;
-
-   for (i = 0; i < size && i < 511; i++) {
-       machine->ReadMem(addr + i, 1, &ch);
-       buffer[i] = (char) ch;
-   }
-   buffer[i] = '\0';
-
-   if (file == 1 || file == 2) {  // stdout o stderr
-       printf("%s", buffer);
-   } else {
-       // Por ahora, no soportamos otros archivos
-       DEBUG('u', "Write syscall: Unsupported file descriptor %d\n", file);
-   }
-   */
 }
+
+
 
 
 

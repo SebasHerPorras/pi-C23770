@@ -15,6 +15,8 @@
 #include "interrupt.h"
 #include "stats.h"
 #include "timer.h"
+#include "nachostabla.h" // Added for the open files table
+#include "console.h"
 
 // Initialization and cleanup routines
 extern void Initialize(int argc, char **argv); 	// Initialization,
@@ -36,6 +38,9 @@ extern Timer *timer;				// the hardware alarm clock
 extern Lock* memoryLock;
 extern BitMap *MiMapa; 		// bitmap for the page table Sebas implementation
 extern Machine* machine;	// user program memory and registers
+extern NachosOpenFilesTable* openFilesTable; // Tabla de archivos abiertos
+
+
 #endif
 
 #ifdef FILESYS_NEEDED 		// FILESYS or FILESYS_STUB 

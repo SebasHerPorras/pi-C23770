@@ -36,6 +36,7 @@ SynchDisk   *synchDisk;
 Machine *machine;	// user program memory and registers
 BitMap *MiMapa; 		// bitmap for the page table Sebas implementation
 Lock* memoryLock;	// lock for the memory manager
+NachosOpenFilesTable* openFilesTable; // Tabla de archivos abiertos
 #endif
 
 #ifdef NETWORK
@@ -182,6 +183,7 @@ Initialize(int argc, char **argv)
     machine = new Machine(debugUserProg);	// this must come first
     MiMapa = new BitMap(NumPhysPages);	// bitmap for the page table Sebas implementation
     memoryLock = new Lock("memoryLock");	// lock for the memory manager
+    openFilesTable = new NachosOpenFilesTable(); // Tabla de archivos abiertos
 #endif
 
 #ifdef FILESYS
