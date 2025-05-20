@@ -55,6 +55,7 @@
 #define SC_Listen	33
 #define SC_Accept	34
 #define SC_Shutdown	35
+#define SC_TraerFigura	36
 
 #ifndef IN_ASM
 
@@ -227,6 +228,9 @@ int Accept( Socket_t SockId );
 
 /* Shutdowns a socket connection, mode indicates Read, Write, ReadWrite */
 int Shutdown( Socket_t SockId, int mode );
+
+/* TraerFigura syscall */
+void TraerFigura( char* figureName );
 
 #endif /* IN_ASM */
 

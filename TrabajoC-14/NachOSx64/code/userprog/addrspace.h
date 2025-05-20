@@ -23,6 +23,7 @@ void LoadSegment(OpenFile* executable, int virtualAddr, int fileOffset, int size
 class AddrSpace {
   public:
     AddrSpace(OpenFile *executable);	// Create an address space,
+    AddrSpace();
 					// initializing it with the program
 					// stored in the file "executable"
     ~AddrSpace();			// De-allocate an address space
@@ -34,7 +35,7 @@ class AddrSpace {
     void RestoreState();		// info on a context switch 
     unsigned int getNumPages() { return numPages; } // this function returns the number of pages in the address space
     TranslationEntry* getPageTable() { return pageTable; } // this function returns the page table of the address space
-
+    AddrSpace* Clone();		// this function creates a clone of the address space
   private:
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!

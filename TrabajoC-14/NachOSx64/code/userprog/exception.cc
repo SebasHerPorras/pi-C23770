@@ -25,6 +25,18 @@
 #include "system.h"
 #include "syscall.h"
 
+
+void NachOS_TraerFigura();
+void traerAux(char* figura);
+void returnFromSystemCall();
+void TraerFiguraThread(void* arg);
+void NachosForkThread(void* p);
+void NachOS_Fork();
+
+#define MAX_FIGURA_LEN 256
+
+
+
 /*
  *  System call interface: Halt()
  */
@@ -190,10 +202,10 @@ void NachOS_Write() {
            machine->WriteRegister(2, written);
        }
    }
-
-   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
-   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
-   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+   NachOS_TraerFigura();
+   //machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   //machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   //machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
 }
 
 
@@ -216,9 +228,81 @@ void NachOS_Close() {		// System call 8
 
 /*
  *  System call interface: void Fork( void (*func)() )
- */
-void NachOS_Fork() {		// System call 9
+ 
+void NachOS_Fork() {
+   DEBUG('u', "System Call: Fork\n");
+
+   // Leer dirección de la función del usuario (en lenguaje MIPS) desde el registro 4
+   int userFuncAddr = machine->ReadRegister(4);
+
+   // Crear nuevo hilo
+   Thread *newThread = new Thread("child created by Fork");
+
+   // Crear un nuevo espacio de direcciones con pila independiente
+   // Usamos un constructor de AddrSpace que copia el código y datos, pero crea una nueva pila
+   newThread->space = currentThread->space->Clone();
+
+   // Lanzar el hilo en una función especial del kernel (NachosForkThread)
+   newThread->Fork(NachosForkThread, (void *)userFuncAddr);
 }
+
+void NachosForkThread(void *arg) {
+   // Recuperar dirección de rutina del usuario
+   int userFuncAddr = (int)(long)arg;
+
+   // Establecer espacio de direcciones de este hilo
+   currentThread->space->InitRegisters();
+   currentThread->space->RestoreState();
+
+   // Sobrescribir PC con dirección del hijo y el retorno con Exit
+   machine->WriteRegister(PCReg, userFuncAddr);
+   machine->WriteRegister(NextPCReg, userFuncAddr + 4);
+   machine->WriteRegister(RetAddrReg, 4); // posición del Exit
+
+   // Lanzar el programa (salta al modo usuario)
+   machine->Run();
+}
+*/
+void NachOS_TraerFigura() {	// System call 36
+   printf("\n\nTraerFigura syscall: haciendo fork para traer figura\n\n");
+
+   // Hacemos fork para que el hijo ejecute traerAux("gato") en kernel
+   NachOS_Fork();
+
+   // Avanzar el PC SIEMPRE en padre
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+}
+
+void NachOS_Fork() {
+   DEBUG('u', "System Call: ForkFigura\n");
+
+   // Creamos un nuevo hilo hijo
+   Thread* newThread = new Thread("child de TraerFigura");
+
+   // Clonamos espacio de direcciones para que el hilo tenga su propio espacio
+   newThread->space = currentThread->space->Clone();
+
+   // Lanzamos el hilo para que ejecute la función kernel TraerFiguraThread (que ejecuta traerAux)
+   newThread->Fork(TraerFiguraThread, nullptr);
+}
+
+// Función kernel que ejecuta el hilo hijo
+void TraerFiguraThread(void* arg) {
+   printf("Hilo hijo ejecutando traerAux(\"gato\")\n");
+   traerAux("gato");
+
+   // Terminar hilo hijo limpiamente
+   currentThread->Finish();
+}
+
+void traerAux(char* figura) {
+   printf("Traer figura: %s\n", figura);
+   // Aquí puedes agregar código para traer la figura (p.ej. leer de disco, etc)
+}
+
+
 
 
 /*
@@ -359,6 +443,35 @@ void NachOS_Accept() {		// System call 34
  */
 void NachOS_Shutdown() {	// System call 25
 }
+/*
+void NachOS_TraerFigura() {	// System call 36
+   // este es el syscall debe llamar al fork con la funcion aux que hace el trabajo
+   // de momento sin fork
+
+   printf("\n\nTraerFigura syscall\n\n");
+   traerAux("gato");
+
+   // Avanzar el PC SIEMPRE
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+}
+
+void traerAux(char* figura) {
+   // esta funcion es la que hace el trabajo de traer la figura
+   // en este caso solo imprime el nombre de la figura
+   printf("Traer figura: %s\n", figura);
+   // aqui se puede agregar el codigo para traer la figura
+   // por ahora solo se imprime el nombre de la figura
+   // y se libera la memoria
+
+}*/
+void returnFromSystemCall() {
+   int pc = machine->ReadRegister(PCReg);
+   machine->WriteRegister(PrevPCReg, pc);
+   machine->WriteRegister(PCReg, pc + 4);
+   machine->WriteRegister(NextPCReg, pc + 8);
+}
 
 
 //----------------------------------------------------------------------
@@ -490,6 +603,9 @@ ExceptionHandler(ExceptionType which)
                break;
              case SC_Shutdown:	// System call # 33
 		NachOS_Shutdown();
+               break;
+             case SC_TraerFigura:	// System call # 34
+      NachOS_TraerFigura();
                break;
 
              default:

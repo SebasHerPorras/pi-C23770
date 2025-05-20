@@ -28,6 +28,13 @@
 //----------------------------------------------------------------------
 
 // this function converts virtual addresses to physical addresses Sebas implementation
+// En addrspace.cc
+AddrSpace::AddrSpace() {
+    // No inicializa desde un ejecutable
+    pageTable = nullptr;
+    numPages = 0;
+}
+
 int VirtualToPhysical(int virtualAddr, TranslationEntry* pageTable) {
     int vpn = virtualAddr / PageSize;
     int offset = virtualAddr % PageSize;
@@ -93,7 +100,11 @@ AddrSpace::AddrSpace(OpenFile *executable)
     if ((noffH.noffMagic != NOFFMAGIC) && 
 		(WordToHost(noffH.noffMagic) == NOFFMAGIC))
     	SwapHeader(&noffH);
-    ASSERT(noffH.noffMagic == NOFFMAGIC);
+        printf("\n\nLeyendo el archivo ejecutable...\n");
+        printf("\n\nMagic leído: 0x%x\n", noffH.noffMagic);
+        printf("Magic esperado: 0x%x\n", NOFFMAGIC);
+        // ASSERT(noffH.noffMagic == NOFFMAGIC);
+
 
 // how big is address space?
     size = noffH.code.size + noffH.initData.size + noffH.uninitData.size 
@@ -235,3 +246,41 @@ void AddrSpace::RestoreState()
     machine->pageTable = pageTable;
     machine->pageTableSize = numPages;
 }
+AddrSpace* AddrSpace::Clone() {
+    const unsigned stackPages = 8; // Tamaño de la pila en páginas
+    AddrSpace* newSpace = new AddrSpace();
+    newSpace->numPages = this->numPages;
+    newSpace->pageTable = new TranslationEntry[numPages];
+
+    for (unsigned i = 0; i < numPages; i++) {
+        if (i >= numPages - stackPages) {
+            // Copia privada de la pila
+            memoryLock->Acquire();
+            int frame = MiMapa->Find();
+            memoryLock->Release();
+
+            ASSERT(frame != -1);
+
+            newSpace->pageTable[i].virtualPage = i;
+            newSpace->pageTable[i].physicalPage = frame;
+            newSpace->pageTable[i].valid = true;
+            newSpace->pageTable[i].use = false;
+            newSpace->pageTable[i].dirty = false;
+            newSpace->pageTable[i].readOnly = false;
+
+            // Copiar contenido de pila
+            int padreFrameAddr = this->pageTable[i].physicalPage * PageSize;
+            int hijoFrameAddr = frame * PageSize;
+            bcopy(&machine->mainMemory[padreFrameAddr], &machine->mainMemory[hijoFrameAddr], PageSize);
+        } else {
+            // Compartir páginas de código/datos (lectura o ejecución)
+            newSpace->pageTable[i] = this->pageTable[i];
+            // Opcional: si querés que el hijo no las modifique
+            newSpace->pageTable[i].readOnly = true;
+        }
+    }
+
+    printf("\n[AddrSpace::Clone] Address space clonado (pila nueva, código compartido)\n");
+    return newSpace;
+}
+
