@@ -10,6 +10,7 @@
  */
 class NachosOpenFilesTable {
   #define dbgFileSys 'f'
+  #define MAX_OPEN_FILES 20
 
 public:
     NachosOpenFilesTable();      // Inicializa estructuras internas
@@ -25,13 +26,15 @@ public:
     void delThread();             // Reduce contador de hilos
     void Print() const;           // Imprime contenido para depuración
     int AddSocket(int sockfd); // Agrega un socket a la tabla
+    OpenFile** openFiles;             // Array de punteros a OpenFile
+    bool isSocket[MAX_OPEN_FILES]; // para saber si el fd es socket o archivo normal
 
 private:
     int maxFiles;   // Máximo número de archivos abiertos
-    OpenFile** openFiles;             // Array de punteros a OpenFile
     BitMap* openFilesMap;            // Mapa de bits de archivos abiertos
     int* threadsPerFile;             // Hilos que usan cada archivo
     int usage;                       // Número total de hilos que usan la tabla
+
 };
 
 #endif // NACHOSTABLA_H

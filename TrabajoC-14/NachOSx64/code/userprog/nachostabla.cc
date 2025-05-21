@@ -91,3 +91,13 @@ void NachosOpenFilesTable::Print() const {
         }
     }
 }
+int NachosOpenFilesTable::AddSocket(int sockfd) {
+    for (int i = 2; i < MAX_OPEN_FILES; ++i) { // empieza en 2 para evitar stdin y stdout
+        if (openFiles[i] == NULL) {
+            openFiles[i] = (OpenFile*)sockfd; // guardás el int como si fuera puntero (⚠️)
+            isSocket[i] = true;               // marcás que este fd es un socket
+            return i;
+        }
+    }
+    return -1; // sin espacio
+}

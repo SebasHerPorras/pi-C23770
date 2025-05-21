@@ -40,6 +40,9 @@ void NachosForkThread(void* p);
 void NachOS_Fork();
 char* copyStringFromMachine(int userAddr);
 
+// array de bool sockets
+bool isSocket[MAX_OPEN_FILES];
+
 #define MAX_FIGURA_LEN 256
 
 char* copyStringFromMachine(int userAddr) {
@@ -176,7 +179,7 @@ void NachOS_Write() {
    int fd = machine->ReadRegister(6);
 
    DEBUG('u', "Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
-   printf("Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
+   //printf("Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
 
    if (size < 0) {
        machine->WriteRegister(2, -1);
@@ -205,7 +208,10 @@ void NachOS_Write() {
    buffer[bytesToWrite] = '\0';
 
    if (fd == 1 || fd == 2) {
-       printf("%.*s", bytesToWrite, buffer);
+         // Escribir en consola
+         // fd 1 es salida estándar (stdout)
+         // fd 2 es error estándar (stderr)
+         printf("Escribiendo en consola: \n%.*s\n", bytesToWrite, buffer);
        machine->WriteRegister(2, bytesToWrite);
    } else {
        OpenFile* file = nullptr;
@@ -213,22 +219,35 @@ void NachOS_Write() {
            file = openFilesTable->getOpenFile(fd);
        }
 
-       if (file == nullptr) {
-           DEBUG('u', "Write syscall: Descriptor inválido %d\n", fd);
+       if (isSocket[fd]) {
+         // es socket
+         //printf("es socket\n");
+         int written = write(fd, buffer, bytesToWrite);
+         if (written < 0) {
+             perror("socket write");
+             machine->WriteRegister(2, -1);
+         } else {
+             machine->WriteRegister(2, written);
+         }
+     } else {
+         // es archivo regular
+         //printf("\n\nes archivo regular\n");
+         OpenFile* file = openFilesTable->openFiles[fd];
+         if (file == nullptr) {
+             DEBUG('u', "Write syscall: Descriptor inválido %d\n", fd);
              printf("Descriptor inválido %d\n", fd);
-           machine->WriteRegister(2, -1);
-       } else {
-           printf("Escribiendo en fd=%d\n", fd);
-           printf("%.*s", bytesToWrite, buffer);
-           int written = file->Write(buffer, bytesToWrite);
-           machine->WriteRegister(2, written);
-       }
+             machine->WriteRegister(2, -1);
+         } else {
+             int written = file->Write(buffer, bytesToWrite);
+             machine->WriteRegister(2, written);
+         }
+     }
    }
    // ahorita en memoria está el buffer con muchas letras
    // meter buffer correcto 
 
    
-   printf("retornando de syscall Write\n");
+   // printf("retornando de syscall Write\n");
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
    machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
@@ -248,7 +267,7 @@ void NachOS_Read() { // System call 7
    int fileId     = machine->ReadRegister(6);  // Descriptor de archivo
 
    DEBUG('u', "Read syscall: fd=%d, addr=0x%x, size=%d\n", fileId, bufferAddr, size);
-   printf("Read syscall: fd=%d, addr=0x%x, size=%d\n", fileId, bufferAddr, size);
+   //printf("Read syscall: fd=%d, addr=0x%x, size=%d\n", fileId, bufferAddr, size);
    // Validación básica
    if (size <= 0 || bufferAddr == 0) {
        machine->WriteRegister(2, -1);
@@ -259,13 +278,12 @@ void NachOS_Read() { // System call 7
    int bytesRead = 0;
 
    // Leer desde archivo/socket real
-   printf("Leyendo desde fd=%d\n", fileId);
    bytesRead = read(fileId, kernelBuffer, size);
-   printf("bytesRead=%d\n", bytesRead);
    if (bytesRead < 0) {
-       DEBUG('u', "Read syscall: error al leer desde fd=%d\n", fileId);
-       machine->WriteRegister(2, -1);
+      DEBUG('u', "Read syscall: error al leer desde fd=%d\n", fileId);
+      machine->WriteRegister(2, -1);
    } else {
+       //printf("Leyendo desde fd=%d\n", fileId);
        // Copiar desde kernel hacia espacio de usuario
        for (int i = 0; i < bytesRead; i++) {
            machine->WriteMem(bufferAddr + i, 1, (int)kernelBuffer[i]);
@@ -275,7 +293,7 @@ void NachOS_Read() { // System call 7
 
    delete[] kernelBuffer;
 
-   printf("retornando de syscall Read\n");
+   // printf("retornando de syscall Read\n");
 
    // Avanzar el PC
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
@@ -293,14 +311,34 @@ void NachOS_Close() {		// System call 8
    int fd = machine->ReadRegister(4);
    DEBUG('u', "Close syscall: fd=%d\n", fd);
    printf("Close syscall: fd=%d\n", fd);
-   // Validar el descriptor de archivo
-   
+
+   int result = 0;
+
+   if (fd < 0) {
+      result = -1;
+   } else if (isSocket[fd]) {
+      printf("es socket\n");
+      // Es un socket, cerrar con close()
+      result = close(fd);
+      isSocket[fd] = false;
+   } else {
+      printf("es archivo regular\n");
+      // Es archivo regular
+      OpenFile* file = openFilesTable->openFiles[fd];
+      if (file != nullptr) {
+         openFilesTable->Close(fd);
+         result = 0;
+      } else {
+         result = -1;
+      }
+   }
+
+   machine->WriteRegister(2, result);
+
    // Avanzar el PC
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
    machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
-
-
 }
 
 
@@ -518,6 +556,8 @@ void NachOS_Socket() { // System call 30
    } else {
        DEBUG('u', "Socket syscall: Socket creado con fd=%d\n", sockfd);
        printf("Socket creado con fd=%d\n", sockfd);
+         // Agregar socket a la tabla de archivos abiertos
+         isSocket[sockfd] = true;
        machine->WriteRegister(2, sockfd);
    }
    // poner el sockfd en el registro 2 que es el de retorno
@@ -547,7 +587,7 @@ void NachOS_Socket() { // System call 30
    ip[15] = '\0';
    const char* ipquemada = "163.178.104.62";
    DEBUG('u', "Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
-   printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
+   //printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
 
    // Crear sockaddr_in
    struct sockaddr_in serv_addr;
@@ -556,9 +596,9 @@ void NachOS_Socket() { // System call 30
    serv_addr.sin_addr.s_addr = inet_addr(ipquemada);
 
    // Realizar conexión
-   printf("Connect syscall: intentando conectar...\n");
+   //printf("Connect syscall: intentando conectar...\n");
    int result = connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-   printf("Connect syscall: resultado de connect=%d\n", result);
+   //printf("Connect syscall: resultado de connect=%d\n", result);
    if (result < 0) {
        perror("Connect syscall: error en connect");
        machine->WriteRegister(2, -1);
@@ -749,7 +789,6 @@ ExceptionHandler(ExceptionType which)
                 break;
 
              case SC_Socket:	// System call # 30
-             printf("\n\nsyscall de socket\n\n");
 		NachOS_Socket();
                break;
              case SC_Connect:	// System call # 31
