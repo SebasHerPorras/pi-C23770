@@ -1,81 +1,91 @@
-# use normal make for this Makefile
 #
-# Makefile for building user programs to run on top of Nachos
-#
-# Several things to be aware of:
-#
-#    Nachos assumes that the location of the program startup routine (the
-# 	location the kernel jumps to when the program initially starts up)
-#       is at location 0.  This means: start.o must be the first .o passed 
-# 	to ld, in order for the routine "Start" to be loaded at location 0
+# Makefile para construir programas de usuario para Nachos
 #
 
-# if you are cross-compiling, you need to point to the right executables
-# and change the flags to ld and the build procedure for as
-#GCCDIR = ~/gnu/local/decstation-ultrix/bin/
+# Directorio con los ejecutables cruzados
 GCCDIR = ../bin/
+
+# Flags para linker y ensamblador
 LDFLAGS = -T script -N
 ASFLAGS = -mips1
-CPPFLAGS = $(INCDIR)
 
+# Incluye directorios de cabeceras
+INCDIR = -I../userprog -I../threads
 
-# if you aren't cross-compiling:
-#GCCDIR =
-#LDFLAGS = -N -T 0
-#ASFLAGS =
-#CPPFLAGS = -P $(INCDIR)
+# Flags para compilador C (sin -G 0 para evitar error con 'as')
+CFLAGS = -c $(INCDIR) -mips1
 
+# Agrega el directorio bin al PATH para usar compiladores y herramientas
 PATH := ../bin:$(PATH)
 
+# Herramientas
+# Herramientas
 CC = $(GCCDIR)mips-gcc
 AS = $(GCCDIR)as
 LD = $(GCCDIR)mips-ld
 
-CPP = /lib/cpp
-INCDIR =-I../userprog -I../threads
-# Corrects the error: dangerous relocation GP
-CFLAGS = -c $(INCDIR) -mips1 -G 0
+# Usar mips-gcc para el preprocesador
+CPP = $(CC) -E
+CPPFLAGS = $(INCDIR)
 
-all: halt shell matmult sort
 
+# Regla para generar start.o a partir de start.s y syscall.h
 start.o: start.s ../userprog/syscall.h
 	$(CPP) $(CPPFLAGS) start.s > strt.s
 	$(AS) $(ASFLAGS) -o start.o strt.s
 	/bin/rm strt.s
 
+# Reglas para los programas predefinidos
+
 halt.o: halt.c
-	$(CC) $(CFLAGS) -c halt.c
+	$(CC) $(CFLAGS) halt.c
+
 halt: halt.o start.o
 	$(LD) $(LDFLAGS) start.o halt.o -o halt.coff
 	../bin/coff2noff halt.coff halt
 
 shell.o: shell.c
-	$(CC) $(CFLAGS) -c shell.c
+	$(CC) $(CFLAGS) shell.c
+
 shell: shell.o start.o
 	$(LD) $(LDFLAGS) start.o shell.o -o shell.coff
 	../bin/coff2noff shell.coff shell
 
 sort.o: sort.c
-	$(CC) $(CFLAGS) -c sort.c
+	$(CC) $(CFLAGS) sort.c
+
 sort: sort.o start.o
 	$(LD) $(LDFLAGS) start.o sort.o -o sort.coff
 	../bin/coff2noff sort.coff sort
 
 matmult.o: matmult.c
-	$(CC) $(CFLAGS) -c matmult.c
+	$(CC) $(CFLAGS) matmult.c
+
 matmult: matmult.o start.o
 	$(LD) $(LDFLAGS) start.o matmult.o -o matmult.coff
 	../bin/coff2noff matmult.coff matmult
 
+# Regla para fork (agregada)
 
-# Estas reglas sirven para compilar programas simples, que consistan en un unico fuente
-# Las reglas anteriores para construir los ejecutables
-# halt, shell, sort y matmult se podrian suprimir
+fork.o: forktest.c
+	$(CC) $(CFLAGS) forktest.c
 
-%: %.c 
-	make start.o 
+fork: fork.o start.o
+	$(LD) $(LDFLAGS) start.o fork.o -o fork.coff
+	../bin/coff2noff fork.coff fork
+
+socket.o: socket.c
+	$(CC) $(CFLAGS) -c socket.c
+
+socket: socket.o start.o
+	$(LD) $(LDFLAGS) start.o socket.o -o socket.coff
+	../bin/coff2noff socket.coff socket
+
+# Regla general para compilar programas simples de un solo archivo .c
+
+%: %.c
+	make start.o
 	$(CC) $(CFLAGS) -c $<
 	$(LD) $(LDFLAGS) start.o $*.o -o $*.coff
 	../bin/coff2noff $*.coff $@
-	
 

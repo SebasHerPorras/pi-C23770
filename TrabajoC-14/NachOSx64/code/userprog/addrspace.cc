@@ -33,6 +33,7 @@ AddrSpace::AddrSpace() {
     // No inicializa desde un ejecutable
     pageTable = nullptr;
     numPages = 0;
+    
 }
 
 int VirtualToPhysical(int virtualAddr, TranslationEntry* pageTable) {
@@ -173,7 +174,12 @@ AddrSpace::AddrSpace(OpenFile *executable)
                     noffH.initData.size, pageTable);
         printf("from::Addrspace, finished loading initData segment, virtual to physical\n");
     }
+    nextFreeVirtualAddr = noffH.code.virtualAddr + noffH.code.size + noffH.initData.size + noffH.uninitData.size;
 
+    // Por si acaso la dirección pasa del límite de la memoria asignada:
+    if (nextFreeVirtualAddr > numPages * PageSize) {
+        nextFreeVirtualAddr = numPages * PageSize;
+    }
     // printf("AddrSpace::AddrSpace: %d pages allocated\n", numPages);
     printf("\nfrom::Addrspace, finished loading memory pages\n");
    
@@ -284,3 +290,19 @@ AddrSpace* AddrSpace::Clone() {
     return newSpace;
 }
 
+int AddrSpace::AllocateMemory(int size) {
+    // Alinear size a múltiplo de 4 para seguridad (opcional)
+    int alignedSize = (size + 3) & ~3;
+
+    // Verificar que no se pase del límite del espacio virtual
+    if (nextFreeVirtualAddr + alignedSize > numPages * PageSize) {
+        printf("[AllocateMemory] No hay espacio suficiente para asignar %d bytes\n", size);
+        return -1;  // Error: no hay espacio
+    }
+
+    int allocatedAddr = nextFreeVirtualAddr;
+    nextFreeVirtualAddr += alignedSize;
+
+    printf("[AllocateMemory] Asignado %d bytes en dirección virtual %d\n", size, allocatedAddr);
+    return allocatedAddr;
+}

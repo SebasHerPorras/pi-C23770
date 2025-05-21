@@ -24,6 +24,12 @@
 #include "copyright.h"
 #include "system.h"
 #include "syscall.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>	// for inet_pton
+#include <fcntl.h>
+#include <unistd.h>
+
+
 
 
 void NachOS_TraerFigura();
@@ -32,10 +38,22 @@ void returnFromSystemCall();
 void TraerFiguraThread(void* arg);
 void NachosForkThread(void* p);
 void NachOS_Fork();
+char* copyStringFromMachine(int userAddr);
 
 #define MAX_FIGURA_LEN 256
 
-
+char* copyStringFromMachine(int userAddr) {
+   char* kernelBuffer = new char[MAX_FIGURA_LEN];
+   int i = 0;
+   int ch;
+   do {
+       machine->ReadMem(userAddr + i, 1, &ch);
+       kernelBuffer[i] = (char)ch;
+       i++;
+   } while (ch != 0 && i < MAX_FIGURA_LEN);
+   kernelBuffer[MAX_FIGURA_LEN - 1] = '\0';
+   return kernelBuffer;
+}
 
 /*
  *  System call interface: Halt()
@@ -51,7 +69,6 @@ void NachOS_Halt() {		// System call 0
 /*
  *  System call interface: void Exit( int )
  */
-int cont = 0;
 void NachOS_Exit() {
    int status = machine->ReadRegister(4);    // código de salida
    DEBUG('u', "Exit system call with status %d\n", status);
@@ -72,6 +89,7 @@ void NachOS_Exit() {
    // Avanzar el PC para evitar bucles infinitos de syscalls
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
    // No es necesario avanzar NextPCReg, solo PCReg y PrevPCReg.
    // El bucle infinito suele ocurrir si no se avanza el PC correctamente.
    // Elimina la línea que avanza NextPCReg.
@@ -202,10 +220,14 @@ void NachOS_Write() {
            machine->WriteRegister(2, written);
        }
    }
-   NachOS_TraerFigura();
-   //machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
-   //machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
-   //machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+   // ahorita en memoria está el buffer con muchas letras
+   // meter buffer correcto 
+
+   
+   
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
 }
 
 
@@ -215,8 +237,43 @@ void NachOS_Write() {
 /*
  *  System call interface: OpenFileId Read( char *, int, OpenFileId )
  */
-void NachOS_Read() {		// System call 7
+void NachOS_Read() { // System call 7
+   // Leer parámetros desde los registros
+   int bufferAddr = machine->ReadRegister(4);  // Dirección del buffer en espacio de usuario
+   int size       = machine->ReadRegister(5);  // Número de bytes a leer
+   int fileId     = machine->ReadRegister(6);  // Descriptor de archivo
+
+   // Validación básica
+   if (size <= 0 || bufferAddr == 0) {
+       machine->WriteRegister(2, -1);
+       return;
+   }
+
+   char* kernelBuffer = new char[size + 1]; // +1 por seguridad
+   int bytesRead = 0;
+
+   // Leer desde archivo/socket real
+   bytesRead = read(fileId, kernelBuffer, size);
+   
+   if (bytesRead < 0) {
+       DEBUG('u', "Read syscall: error al leer desde fd=%d\n", fileId);
+       machine->WriteRegister(2, -1);
+   } else {
+       // Copiar desde kernel hacia espacio de usuario
+       for (int i = 0; i < bytesRead; i++) {
+           machine->WriteMem(bufferAddr + i, 1, (int)kernelBuffer[i]);
+       }
+       machine->WriteRegister(2, bytesRead); // Cantidad de bytes leídos
+   }
+
+   delete[] kernelBuffer;
+
+   // Avanzar el PC
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
 }
+
 
 
 /*
@@ -266,7 +323,15 @@ void NachosForkThread(void *arg) {
 void NachOS_TraerFigura() {	// System call 36
    printf("\n\nTraerFigura syscall: haciendo fork para traer figura\n\n");
 
-   // Hacemos fork para que el hijo ejecute traerAux("gato") en kernel
+   // Leer dirección del string de usuario desde el registro 4
+   int userStrAddr = machine->ReadRegister(4);
+   int size = machine->ReadRegister(5);
+   int fd = machine->ReadRegister(6);
+
+   // Copiar string de usuario a kernel
+   char* figura = copyStringFromMachine(userStrAddr);
+
+   // Hacer fork pasando la figura como argumento
    NachOS_Fork();
 
    // Avanzar el PC SIEMPRE en padre
@@ -278,6 +343,9 @@ void NachOS_TraerFigura() {	// System call 36
 void NachOS_Fork() {
    DEBUG('u', "System Call: ForkFigura\n");
 
+   int addr = machine->ReadRegister(4);
+   char* figura = copyStringFromMachine(addr);
+
    // Creamos un nuevo hilo hijo
    Thread* newThread = new Thread("child de TraerFigura");
 
@@ -285,20 +353,25 @@ void NachOS_Fork() {
    newThread->space = currentThread->space->Clone();
 
    // Lanzamos el hilo para que ejecute la función kernel TraerFiguraThread (que ejecuta traerAux)
-   newThread->Fork(TraerFiguraThread, nullptr);
+   newThread->Fork(TraerFiguraThread, figura);
 }
 
 // Función kernel que ejecuta el hilo hijo
 void TraerFiguraThread(void* arg) {
-   printf("Hilo hijo ejecutando traerAux(\"gato\")\n");
-   traerAux("gato");
+   char* figura = (char*)arg;
+
+   printf("\n\nHilo hijo ejecutando traerAux con figura: %s\n\n\n", figura);
+   traerAux(figura);
+
+   // Liberar memoria kernel de figura después de usarla
+   delete[] figura;
 
    // Terminar hilo hijo limpiamente
    currentThread->Finish();
 }
 
 void traerAux(char* figura) {
-   printf("Traer figura: %s\n", figura);
+   printf("Traer figura: %s\n\n", figura);
    // Aquí puedes agregar código para traer la figura (p.ej. leer de disco, etc)
 }
 
@@ -406,15 +479,80 @@ void NachOS_CondBroadcast() {		// System call 23
 /*
  *  System call interface: Socket_t Socket( int, int )
  */
-void NachOS_Socket() {			// System call 30
+void NachOS_Socket() { // System call 30
+  // AF_INET_NachOS, SOCK_STREAM_NachOS como parametros
+   int domain = machine->ReadRegister(4);
+   int type = machine->ReadRegister(5);
+   // Validar los parámetros
+   // Traducción NachOS a POSIX
+   domain = (domain == 0) ? AF_INET : AF_UNSPEC;
+   type = (type == 0) ? SOCK_STREAM : SOCK_DGRAM;
+   DEBUG('u', "Socket syscall: domain=%d, type=%d\n", domain, type);
+   // Crear socket con syscall de c
+   int sockfd = socket(domain, type, 0);
+   if (sockfd < 0) {
+       DEBUG('u', "Socket syscall: Error al crear socket\n");
+       printf("Error al crear socket\n");
+       machine->WriteRegister(2, -1);
+   } else {
+       DEBUG('u', "Socket syscall: Socket creado con fd=%d\n", sockfd);
+       printf("Socket creado con fd=%d\n", sockfd);
+       machine->WriteRegister(2, sockfd);
+   }
+   // poner el sockfd en el registro 2 que es el de retorno
+   // Avanzar el PC SIEMPRE
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+
+ }
+ 
+ /*
+  *  System call interface: Socket_t Connect( char *, int )
+  */
+ void NachOS_Connect() { // System call 31
+   int sockfd = machine->ReadRegister(4);
+   int addr_ptr = machine->ReadRegister(5); // dirección en user space
+   int port = machine->ReadRegister(6);
+
+   // Leer IP desde memoria de usuario (máx 16 bytes por seguridad)
+   char ip[16]; // ejemplo: "127.0.0.1"
+   for (int i = 0; i < 15; ++i) {
+       char c;
+       machine->ReadMem(addr_ptr + i, 1, (int*)&c);
+       ip[i] = c;
+       if (c == '\0') break;
+   }
+   ip[15] = '\0';
+
+   DEBUG('u', "Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
+   printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
+
+   // Crear sockaddr_in
+   struct sockaddr_in serv_addr;
+   serv_addr.sin_family = AF_INET;
+   serv_addr.sin_port = htons(port);
+   serv_addr.sin_addr.s_addr = inet_addr(ip);
+
+   // Realizar conexión
+   printf("Connect syscall: intentando conectar...\n");
+   int result = connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+   printf("Connect syscall: resultado de connect=%d\n", result);
+   if (result < 0) {
+       perror("Connect syscall: error en connect");
+       machine->WriteRegister(2, -1);
+   } else {
+       machine->WriteRegister(2, 0); // éxito
+         DEBUG('u', "Connect syscall: conexión exitosa\n");
+         printf("Connect syscall: conexión exitosa\n");
+   }
+
+   // Avanzar el PC SIEMPRE
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg)); 
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);  
 }
 
-
-/*
- *  System call interface: Socket_t Connect( char *, int )
- */
-void NachOS_Connect() {		// System call 31
-}
 
 
 /*
@@ -470,6 +608,8 @@ void returnFromSystemCall() {
    int pc = machine->ReadRegister(PCReg);
    machine->WriteRegister(PrevPCReg, pc);
    machine->WriteRegister(PCReg, pc + 4);
+   // pc + 4 es la siguiente instrucción
+   // pc + 8 es la siguiente instrucción después de la syscall
    machine->WriteRegister(NextPCReg, pc + 8);
 }
 
@@ -501,6 +641,7 @@ void
 ExceptionHandler(ExceptionType which)
 {
     int type = machine->ReadRegister(2);
+    
 
     switch ( which ) {
 
@@ -587,6 +728,7 @@ ExceptionHandler(ExceptionType which)
                 break;
 
              case SC_Socket:	// System call # 30
+             printf("\n\nsyscall de socket\n\n");
 		NachOS_Socket();
                break;
              case SC_Connect:	// System call # 31

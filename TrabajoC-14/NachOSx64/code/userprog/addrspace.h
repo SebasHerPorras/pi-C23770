@@ -36,10 +36,13 @@ class AddrSpace {
     unsigned int getNumPages() { return numPages; } // this function returns the number of pages in the address space
     TranslationEntry* getPageTable() { return pageTable; } // this function returns the page table of the address space
     AddrSpace* Clone();		// this function creates a clone of the address space
-  private:
+    int AllocateMemory(int size); // this function allocates memory in the address space
+    private:
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!
     unsigned int numPages;		// Number of pages in the virtual 
+    int nextFreeVirtualAddr;  // Dirección virtual desde donde empieza el heap libre
+
 					// address space
 };
 
