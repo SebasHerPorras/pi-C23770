@@ -306,3 +306,5 @@ int AddrSpace::AllocateMemory(int size) {
     printf("[AllocateMemory] Asignado %d bytes en dirección virtual %d\n", size, allocatedAddr);
     return allocatedAddr;
 }
+
+

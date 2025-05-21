@@ -24,6 +24,7 @@ public:
     void addThread(int);              // Aumenta contador de hilos
     void delThread();             // Reduce contador de hilos
     void Print() const;           // Imprime contenido para depuración
+    int AddSocket(int sockfd); // Agrega un socket a la tabla
 
 private:
     int maxFiles;   // Máximo número de archivos abiertos

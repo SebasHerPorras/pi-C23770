@@ -176,6 +176,7 @@ void NachOS_Write() {
    int fd = machine->ReadRegister(6);
 
    DEBUG('u', "Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
+   printf("Write syscall: fd=%d, addr=0x%x, size=%d\n", fd, addr, size);
 
    if (size < 0) {
        machine->WriteRegister(2, -1);
@@ -214,8 +215,11 @@ void NachOS_Write() {
 
        if (file == nullptr) {
            DEBUG('u', "Write syscall: Descriptor inválido %d\n", fd);
+             printf("Descriptor inválido %d\n", fd);
            machine->WriteRegister(2, -1);
        } else {
+           printf("Escribiendo en fd=%d\n", fd);
+           printf("%.*s", bytesToWrite, buffer);
            int written = file->Write(buffer, bytesToWrite);
            machine->WriteRegister(2, written);
        }
@@ -224,7 +228,7 @@ void NachOS_Write() {
    // meter buffer correcto 
 
    
-   
+   printf("retornando de syscall Write\n");
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
    machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
@@ -243,6 +247,8 @@ void NachOS_Read() { // System call 7
    int size       = machine->ReadRegister(5);  // Número de bytes a leer
    int fileId     = machine->ReadRegister(6);  // Descriptor de archivo
 
+   DEBUG('u', "Read syscall: fd=%d, addr=0x%x, size=%d\n", fileId, bufferAddr, size);
+   printf("Read syscall: fd=%d, addr=0x%x, size=%d\n", fileId, bufferAddr, size);
    // Validación básica
    if (size <= 0 || bufferAddr == 0) {
        machine->WriteRegister(2, -1);
@@ -253,8 +259,9 @@ void NachOS_Read() { // System call 7
    int bytesRead = 0;
 
    // Leer desde archivo/socket real
+   printf("Leyendo desde fd=%d\n", fileId);
    bytesRead = read(fileId, kernelBuffer, size);
-   
+   printf("bytesRead=%d\n", bytesRead);
    if (bytesRead < 0) {
        DEBUG('u', "Read syscall: error al leer desde fd=%d\n", fileId);
        machine->WriteRegister(2, -1);
@@ -268,6 +275,8 @@ void NachOS_Read() { // System call 7
 
    delete[] kernelBuffer;
 
+   printf("retornando de syscall Read\n");
+
    // Avanzar el PC
    machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
    machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
@@ -280,6 +289,18 @@ void NachOS_Read() { // System call 7
  *  System call interface: void Close( OpenFileId )
  */
 void NachOS_Close() {		// System call 8
+   // Leer el descriptor de archivo desde el registro 4
+   int fd = machine->ReadRegister(4);
+   DEBUG('u', "Close syscall: fd=%d\n", fd);
+   printf("Close syscall: fd=%d\n", fd);
+   // Validar el descriptor de archivo
+   
+   // Avanzar el PC
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+
+
 }
 
 
@@ -524,7 +545,7 @@ void NachOS_Socket() { // System call 30
        if (c == '\0') break;
    }
    ip[15] = '\0';
-
+   const char* ipquemada = "163.178.104.62";
    DEBUG('u', "Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
    printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
 
@@ -532,7 +553,7 @@ void NachOS_Socket() { // System call 30
    struct sockaddr_in serv_addr;
    serv_addr.sin_family = AF_INET;
    serv_addr.sin_port = htons(port);
-   serv_addr.sin_addr.s_addr = inet_addr(ip);
+   serv_addr.sin_addr.s_addr = inet_addr(ipquemada);
 
    // Realizar conexión
    printf("Connect syscall: intentando conectar...\n");

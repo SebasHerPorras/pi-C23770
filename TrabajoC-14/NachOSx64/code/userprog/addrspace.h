@@ -37,6 +37,7 @@ class AddrSpace {
     TranslationEntry* getPageTable() { return pageTable; } // this function returns the page table of the address space
     AddrSpace* Clone();		// this function creates a clone of the address space
     int AllocateMemory(int size); // this function allocates memory in the address space
+    void Close(int fd); // this function closes the file descriptor
     private:
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!
