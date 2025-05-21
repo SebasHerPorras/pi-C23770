@@ -119,9 +119,40 @@ void NachOS_Join() {		// System call 3
 /*
  *  System call interface: void Create( char * )
  */
-void NachOS_Create() {		// System call 4
-   
+void NachOS_Create() {
+   int addr = machine->ReadRegister(4);  // Dirección del nombre del archivo
+   bool fallo = false;
+
+   char filename[128];  // Asumimos nombre corto (<128)
+   int i = 0;
+   int ch;
+   do {
+       if (!machine->ReadMem(addr + i, 1, &ch)) {
+           fallo = true;
+           break;
+       }
+       filename[i] = (char)ch;
+       i++;
+   } while (ch != '\0' && i < 127);
+   filename[127] = '\0';
+
+   if (fallo) {
+       machine->WriteRegister(2, -1);
+   } else {
+       printf("Create syscall de manera correcta: filename=%s\n", filename);
+       if (fileSystem->Create(filename, 0)) {
+           machine->WriteRegister(2, 1);
+       } else {
+           machine->WriteRegister(2, -1);
+       }
+   }
+
+   // Avanzar PC
+   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
+   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
+   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
 }
+
 
 
 /*
