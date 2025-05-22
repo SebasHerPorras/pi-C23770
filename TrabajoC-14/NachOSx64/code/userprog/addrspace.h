@@ -38,6 +38,9 @@ class AddrSpace {
     AddrSpace* Clone();		// this function creates a clone of the address space
     int AllocateMemory(int size); // this function allocates memory in the address space
     void Close(int fd); // this function closes the file descriptor
+    int AllocateStackForClone(); // this function allocates a stack for the clone
+    int GetStackPointer(); // this function returns the stack pointer
+
     private:
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!

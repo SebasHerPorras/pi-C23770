@@ -27,6 +27,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>	// for inet_pton
 #include <fcntl.h>
+#include <cstdint>
 #include <unistd.h>
 
 
@@ -39,6 +40,7 @@ void TraerFiguraThread(void* arg);
 void NachosForkThread(void* p);
 void NachOS_Fork();
 char* copyStringFromMachine(int userAddr);
+void NachOS_ThreadStart(void* arg);
 
 // array de bool sockets
 bool isSocket[MAX_OPEN_FILES];
@@ -432,33 +434,43 @@ void NachOS_TraerFigura() {	// System call 36
 }
 
 void NachOS_Fork() {
-   DEBUG('u', "System Call: ForkFigura\n");
+   DEBUG('u', "System Call: Fork\n");
 
-   int addr = machine->ReadRegister(4);
-   char* figura = copyStringFromMachine(addr);
+   int funcAddr = machine->ReadRegister(4);
+   Thread* newThread = new Thread("Forked Thread");
 
-   // Creamos un nuevo hilo hijo
-   Thread* newThread = new Thread("child de TraerFigura");
-
-   // Clonamos espacio de direcciones para que el hilo tenga su propio espacio
+   // Clonar espacio de direcciones (incluyendo nueva pila)
    newThread->space = currentThread->space->Clone();
 
-   // Lanzamos el hilo para que ejecute la función kernel TraerFiguraThread (que ejecuta traerAux)
-   newThread->Fork(TraerFiguraThread, figura);
+   // Configurar el stack pointer para el nuevo hilo
+   int newStackPointer = currentThread->space->AllocateStackForClone();
+   machine->WriteRegister(StackReg, newStackPointer);
+
+   // Fork para ejecutar la función pasada
+   newThread->Fork(NachOS_ThreadStart, (void*)funcAddr);
+
+   // Padre recibe 1 (valor arbitrario positivo)
+   machine->WriteRegister(2, 1);
+
+   // Avanzar PC
+   returnFromSystemCall();
 }
 
-// Función kernel que ejecuta el hilo hijo
-void TraerFiguraThread(void* arg) {
-   char* figura = (char*)arg;
+void NachOS_ThreadStart(void* func) {
+   intptr_t funcAddr = reinterpret_cast<intptr_t>(func);
+   printf("Hilo hijo creado, ejecutando función en dirección: %p\n", (void*)funcAddr);
 
-   printf("\n\nHilo hijo ejecutando traerAux con figura: %s\n\n\n", figura);
-   traerAux(figura);
+   // Hijo recibe 0
+   machine->WriteRegister(2, 0);
 
-   // Liberar memoria kernel de figura después de usarla
-   delete[] figura;
+   // Configurar stack pointer (ya está configurado por Clone)
+   // Configurar PC para la función
+   machine->WriteRegister(PCReg, funcAddr);
+   machine->WriteRegister(NextPCReg, funcAddr + 4);
 
-   // Terminar hilo hijo limpiamente
-   currentThread->Finish();
+   // Ejecutar
+   machine->Run();
+   ASSERT(false); // Nunca debe llegar aquí
 }
 
 void traerAux(char* figura) {

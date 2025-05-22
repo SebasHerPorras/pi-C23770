@@ -252,41 +252,46 @@ void AddrSpace::RestoreState()
     machine->pageTable = pageTable;
     machine->pageTableSize = numPages;
 }
+int AddrSpace::AllocateStackForClone() {
+    // Asignar nueva pila en la parte superior del espacio de direcciones
+    int stackPointer = numPages * PageSize - 16; // Mismo desplazamiento que InitRegisters
+    return stackPointer;
+}
+
+// Modificar el método Clone para mejor manejo de memoria
 AddrSpace* AddrSpace::Clone() {
-    const unsigned stackPages = 8; // Tamaño de la pila en páginas
     AddrSpace* newSpace = new AddrSpace();
     newSpace->numPages = this->numPages;
     newSpace->pageTable = new TranslationEntry[numPages];
-
+    
+    // Calcular páginas de stack (últimas 8 páginas)
+    const unsigned stackStartPage = numPages - divRoundUp(UserStackSize, PageSize);
+    
     for (unsigned i = 0; i < numPages; i++) {
-        if (i >= numPages - stackPages) {
-            // Copia privada de la pila
+        if (i >= stackStartPage) {
+            // Páginas de stack: nuevas copias
             memoryLock->Acquire();
             int frame = MiMapa->Find();
             memoryLock->Release();
-
+            
             ASSERT(frame != -1);
-
+            
             newSpace->pageTable[i].virtualPage = i;
             newSpace->pageTable[i].physicalPage = frame;
             newSpace->pageTable[i].valid = true;
             newSpace->pageTable[i].use = false;
             newSpace->pageTable[i].dirty = false;
             newSpace->pageTable[i].readOnly = false;
-
-            // Copiar contenido de pila
-            int padreFrameAddr = this->pageTable[i].physicalPage * PageSize;
-            int hijoFrameAddr = frame * PageSize;
-            bcopy(&machine->mainMemory[padreFrameAddr], &machine->mainMemory[hijoFrameAddr], PageSize);
+            
+            // Inicializar pila vacía
+            bzero(&machine->mainMemory[frame * PageSize], PageSize);
         } else {
-            // Compartir páginas de código/datos (lectura o ejecución)
+            // Páginas de código/datos: compartidas (read-only)
             newSpace->pageTable[i] = this->pageTable[i];
-            // Opcional: si querés que el hijo no las modifique
             newSpace->pageTable[i].readOnly = true;
         }
     }
-
-    printf("\n[AddrSpace::Clone] Address space clonado (pila nueva, código compartido)\n");
+    
     return newSpace;
 }
 
