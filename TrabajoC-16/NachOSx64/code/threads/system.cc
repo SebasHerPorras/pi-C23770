@@ -182,7 +182,7 @@ Initialize(int argc, char **argv)
 #ifdef USER_PROGRAM
     machine = new Machine(debugUserProg);	// this must come first
     MiMapa = new BitMap(NumPhysPages);	// bitmap for the page table Sebas implementation
-    memoryLock = new Lock("memoryLock");	// lock for the memory manager
+    memoryLock = new Lock((char*)"memoryLock");	// lock for the memory manager
     openFilesTable = new NachosOpenFilesTable(); // Tabla de archivos abiertos
 #endif
 

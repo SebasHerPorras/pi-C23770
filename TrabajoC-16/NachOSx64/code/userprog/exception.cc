@@ -241,14 +241,18 @@ void NachOS_Write() {
    }
    buffer[bytesToWrite] = '\0';
 
+   OpenFile* file = nullptr;
    if (fd == 1 || fd == 2) {
-         // Escribir en consola
-         // fd 1 es salida estándar (stdout)
-         // fd 2 es error estándar (stderr)
-         printf("Escribiendo en consola: \n%.*s\n", bytesToWrite, buffer);
-       machine->WriteRegister(2, bytesToWrite);
+       // Escribir en consola estándar o error estándar
+       int written = write(fd, buffer, bytesToWrite);
+       if (written < 0) {
+           perror("console write");
+           machine->WriteRegister(2, -1);
+       } else {
+           machine->WriteRegister(2, written);
+       }
    } else {
-       OpenFile* file = nullptr;
+        file = nullptr;
        if (fd >= 0) {
            file = openFilesTable->getOpenFile(fd);
        }
@@ -266,7 +270,7 @@ void NachOS_Write() {
      } else {
          // es archivo regular
          //printf("\n\nes archivo regular\n");
-         OpenFile* file = openFilesTable->openFiles[fd];
+         file = openFilesTable->openFiles[fd];
          if (file == nullptr) {
              DEBUG('u', "Write syscall: Descriptor inválido %d\n", fd);
              printf("Descriptor inválido %d\n", fd);
@@ -344,19 +348,19 @@ void NachOS_Close() {		// System call 8
    // Leer el descriptor de archivo desde el registro 4
    int fd = machine->ReadRegister(4);
    DEBUG('u', "Close syscall: fd=%d\n", fd);
-   printf("Close syscall: fd=%d\n", fd);
+   // printf("Close syscall: fd=%d\n", fd);
 
    int result = 0;
 
    if (fd < 0) {
       result = -1;
    } else if (isSocket[fd]) {
-      printf("es socket\n");
+      // printf("es socket\n");
       // Es un socket, cerrar con close()
       result = close(fd);
       isSocket[fd] = false;
    } else {
-      printf("es archivo regular\n");
+      // printf("es archivo regular\n");
       // Es archivo regular
       OpenFile* file = openFilesTable->openFiles[fd];
       if (file != nullptr) {
@@ -414,23 +418,7 @@ void NachosForkThread(void *arg) {
 }
 */
 void NachOS_TraerFigura() {	// System call 36
-   printf("\n\nTraerFigura syscall: haciendo fork para traer figura\n\n");
-
-   // Leer dirección del string de usuario desde el registro 4
-   int userStrAddr = machine->ReadRegister(4);
-   int size = machine->ReadRegister(5);
-   int fd = machine->ReadRegister(6);
-
-   // Copiar string de usuario a kernel
-   char* figura = copyStringFromMachine(userStrAddr);
-
-   // Hacer fork pasando la figura como argumento
-   NachOS_Fork();
-
-   // Avanzar el PC SIEMPRE en padre
-   machine->WriteRegister(PrevPCReg, machine->ReadRegister(PCReg));
-   machine->WriteRegister(PCReg, machine->ReadRegister(NextPCReg));
-   machine->WriteRegister(NextPCReg, machine->ReadRegister(NextPCReg) + 4);
+  
 }
 
 void NachOS_Fork() {
@@ -447,7 +435,7 @@ void NachOS_Fork() {
    machine->WriteRegister(StackReg, newStackPointer);
 
    // Fork para ejecutar la función pasada
-   newThread->Fork(NachOS_ThreadStart, (void*)funcAddr);
+   newThread->Fork(NachOS_ThreadStart, (void*)(intptr_t)funcAddr);
 
    // Padre recibe 1 (valor arbitrario positivo)
    machine->WriteRegister(2, 1);
@@ -629,7 +617,7 @@ void NachOS_Socket() { // System call 30
        if (c == '\0') break;
    }
    ip[15] = '\0';
-   const char* ipquemada = "163.178.104.62";
+  //  const char* ipquemada = "163.178.104.62";
    DEBUG('u', "Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
    printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
 

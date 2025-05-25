@@ -99,13 +99,13 @@ AddrSpace::AddrSpace(OpenFile *executable)
 
     executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
     if ((noffH.noffMagic != NOFFMAGIC) && 
-		(WordToHost(noffH.noffMagic) == NOFFMAGIC))
-    	SwapHeader(&noffH);
+        (WordToHost(noffH.noffMagic) == NOFFMAGIC)) {
+        SwapHeader(&noffH);
         printf("\n\nLeyendo el archivo ejecutable...\n");
         printf("\n\nMagic leído: 0x%x\n", noffH.noffMagic);
         printf("Magic esperado: 0x%x\n", NOFFMAGIC);
         // ASSERT(noffH.noffMagic == NOFFMAGIC);
-
+    }
 
 // how big is address space?
     size = noffH.code.size + noffH.initData.size + noffH.uninitData.size 

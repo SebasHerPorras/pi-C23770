@@ -2,7 +2,7 @@
 
 DiningPh::DiningPh() {
 
-    dp = new Lock( "dp" );
+    dp = new Lock( (char*)"dp" );
 
     for ( int i = 0; i < 5; i++ ) {
         self[ i ] = new Condition( "philo" );

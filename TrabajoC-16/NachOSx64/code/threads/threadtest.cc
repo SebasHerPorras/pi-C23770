@@ -86,7 +86,6 @@ SimpleThread(void* name)
 void
 ThreadTest()
 {
-    Thread * Ph;
 
     DEBUG('t', "Entering SimpleTest");
 
