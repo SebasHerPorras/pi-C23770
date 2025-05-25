@@ -631,13 +631,13 @@ void NachOS_Socket() { // System call 30
    ip[15] = '\0';
    const char* ipquemada = "163.178.104.62";
    DEBUG('u', "Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
-   //printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
+   printf("Connect syscall: sockfd=%d, ip=%s, port=%d\n", sockfd, ip, port);
 
    // Crear sockaddr_in
    struct sockaddr_in serv_addr;
    serv_addr.sin_family = AF_INET;
    serv_addr.sin_port = htons(port);
-   serv_addr.sin_addr.s_addr = inet_addr(ipquemada);
+   serv_addr.sin_addr.s_addr = inet_addr(ip);
 
    // Realizar conexión
    //printf("Connect syscall: intentando conectar...\n");
