@@ -147,14 +147,14 @@ AddrSpace::AddrSpace(OpenFile *executable)
     unsigned totalSize = noffH.code.size + noffH.initData.size + noffH.uninitData.size + UserStackSize;
     unsigned totalPages = divRoundUp(totalSize, PageSize);
 
-    for (unsigned i = 0; i < totalPages; i++) {
-        unsigned pageStart = i * PageSize;
+    for (unsigned j = 0; j < totalPages; j++) {
+        unsigned pageStart = j * PageSize;
 
-        bool isCodePage = (pageStart >= noffH.code.virtualAddr) && (pageStart < noffH.code.virtualAddr + noffH.code.size);
-        bool isDataPage = (pageStart >= noffH.initData.virtualAddr) && (pageStart < noffH.initData.virtualAddr + noffH.initData.size);
+        bool isCodePage = (pageStart >= (unsigned)noffH.code.virtualAddr) && (pageStart < (unsigned)(noffH.code.virtualAddr + noffH.code.size));
+        bool isDataPage = (pageStart >= (unsigned)noffH.initData.virtualAddr) && (pageStart < (unsigned)(noffH.initData.virtualAddr + noffH.initData.size));
 
         if (!isCodePage && !isDataPage) {
-            int physPage = pageTable[i].physicalPage;
+            int physPage = pageTable[j].physicalPage;
             bzero(&machine->mainMemory[physPage * PageSize], PageSize);
         }
     }
@@ -177,7 +177,7 @@ AddrSpace::AddrSpace(OpenFile *executable)
     nextFreeVirtualAddr = noffH.code.virtualAddr + noffH.code.size + noffH.initData.size + noffH.uninitData.size;
 
     // Por si acaso la dirección pasa del límite de la memoria asignada:
-    if (nextFreeVirtualAddr > numPages * PageSize) {
+    if (nextFreeVirtualAddr > static_cast<int>(numPages * PageSize)) {
         nextFreeVirtualAddr = numPages * PageSize;
     }
     // printf("AddrSpace::AddrSpace: %d pages allocated\n", numPages);
@@ -300,7 +300,7 @@ int AddrSpace::AllocateMemory(int size) {
     int alignedSize = (size + 3) & ~3;
 
     // Verificar que no se pase del límite del espacio virtual
-    if (nextFreeVirtualAddr + alignedSize > numPages * PageSize) {
+    if (nextFreeVirtualAddr + alignedSize > static_cast<int>(numPages * PageSize)) {
         printf("[AllocateMemory] No hay espacio suficiente para asignar %d bytes\n", size);
         return -1;  // Error: no hay espacio
     }
