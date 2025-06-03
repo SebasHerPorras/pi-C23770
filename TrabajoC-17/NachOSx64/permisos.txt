@@ -1,0 +1,7 @@
+
+// desde userprog
+chmod +x ../bin/as
+chmod +x  ../bin/mips-gcc
+chmod +x  ../bin/cc1
+chmod +x  ../bin/mips-ld
+chmod +x  ../bin/coff2noff
