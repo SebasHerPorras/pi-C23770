@@ -174,76 +174,62 @@
   char request[BUFSIZE];
   client->Read(request, BUFSIZE);
 
-  std::cout << "Server received: " << request << " from id: " << client->idSocket << std::endl;
+  std::cout << "Server received: " << request
+            << " from id: " << client->idSocket << std::endl;
 
   char figure_name[BUFSIZE];
   if (process_request(request, figure_name)) {
-      std::cout << "\n\nRequested figure: " << figure_name << "\n" << std::endl;
-      std::cout <<std::endl;
-
+      // Obtiene la figura ASCII; `figure` contiene ya los saltos de línea
       std::string figure = fs.find_figura(figure_name);
-     std::string http_response = 
-       "HTTP/1.1 200 OK\r\n"
-       "Content-Type: text/html; charset=UTF-8\r\n"
-       "Content-Length: " + std::to_string(figure.size()) + "\r\n"
-       "\r\n" +
-       "<html><body>" +
-       "<pre>" + "\n" + figure + "</pre>" +  // Aseguramos que los saltos de línea y formato se respeten
-       "</body></html>";
 
-      client->Write(http_response.c_str(), http_response.size());
+      // Enviamos únicamente el contenido de la figura, sin encabezados HTTP
+      client->Write(figure.c_str(), figure.size());
   } else {
-      std::string error_msg = "Invalid request format";
-      std::string http_response = 
-          "HTTP/1.1 400 Bad Request\r\n"
-         "Content-Type: text/html; charset=UTF-8\r\n"
-          "Content-Length: " + std::to_string(error_msg.size()) + "\r\n"
-          "\r\n" +
-          error_msg;
-
-      client->Write(http_response.c_str(), http_response.size());
+      // En caso de error de formato, devolvemos el mensaje de error
+      client->Write(figure_name, strlen(figure_name));
   }
 
   client->Close();
 }
 
+
 /**
-*   Process the request
-*      Check if the request is valid
-*      If valid, extract the figure name and return it
-*      If invalid, return an error message
-*
-**/
+ *   Process the request
+ *      Check if the request is valid: debe empezar con "GET /figure/"
+ *      Si es válido, extrae el nombre de la figura y lo devuelve en `response`.
+ *      Si es inválido, devuelve false.
+ */
 bool process_request(char* request, char* response) {
- std::string req_str(request);
- std::string prefix = "GET /figure?name=";
+  std::string req_str(request);
+  std::string prefix = "GET /figure/";
 
- size_t pos_start = req_str.find(prefix);
- if (pos_start != std::string::npos) {
-    // Buscamos el final de la línea (antes de espacio o \r o \n)
-    size_t pos_name_start = pos_start + prefix.length();
-    size_t pos_end_space = req_str.find(' ', pos_name_start);
-    size_t pos_end_r = req_str.find('\r', pos_name_start);
-    size_t pos_end_n = req_str.find('\n', pos_name_start);
+  // La línea completa debe tener al menos prefix + 1 caracter de nombre
+  if (req_str.rfind(prefix, 0) == 0 && req_str.size() > prefix.size()) {
+      // Extraemos todo lo que viene tras prefix hasta el final de la línea
+      size_t start = prefix.size();
+      size_t end = req_str.find_first_of("\r\n ", start);
+      if (end == std::string::npos) {
+          end = req_str.size();
+      }
+      std::string figure_name = req_str.substr(start, end - start);
 
-    // Tomamos el mínimo de las posiciones válidas
-    size_t pos_end = std::min({pos_end_space, pos_end_r, pos_end_n, req_str.size()});
+      // Limpiar caracteres no deseados (solo alfanuméricos, '_' o '-')
+      figure_name.erase(std::remove_if(
+          figure_name.begin(), figure_name.end(),
+          [](char c) { return !std::isalnum(c) && c != '_' && c != '-'; }
+      ), figure_name.end());
 
-    std::string figure_name = req_str.substr(pos_name_start, pos_end - pos_name_start);
+      if (!figure_name.empty()) {
+          // Copiamos el nombre de la figura al buffer de respuesta
+          strncpy(response, figure_name.c_str(), BUFSIZE - 1);
+          response[BUFSIZE - 1] = '\0';
+          return true;
+      }
+  }
 
-    // Eliminamos posibles caracteres indeseados (solo letras y números permitidos)
-    figure_name.erase(std::remove_if(figure_name.begin(), figure_name.end(),
-                                     [](char c) { return !std::isalnum(c) && c != '_' && c != '-'; }),
-                      figure_name.end());
-
-    if (!figure_name.empty()) {
-       strncpy(response, figure_name.c_str(), BUFSIZE - 1);
-       response[BUFSIZE - 1] = '\0';
-       return true;
-    }
- }
-
- strncpy(response, "Invalid request format", BUFSIZE - 1);
- response[BUFSIZE - 1] = '\0';
- return false;
-} 
+  // En caso de formato inválido devolvemos una cadena de error breve
+  const char * err = "Invalid request format";
+  strncpy(response, err, BUFSIZE - 1);
+  response[BUFSIZE - 1] = '\0';
+  return false;
+}

@@ -62,7 +62,7 @@ class Tenedor:
     def solicitar_figura(self, nombre_servidor, nombre_figura):
         """
         Se conecta por TCP al servidor (IP, puerto) para pedir la figura:
-        GET /figure?name=nombre_figura HTTP/1.1
+        GET /figure/{nombre_figura}
         """
         with self.lock:
             if nombre_servidor not in self.servidores:
@@ -73,8 +73,10 @@ class Tenedor:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((ip, puerto))
-            request = f"GET /figure?name={nombre_figura} HTTP/1.1\r\nHost: {ip}\r\n\r\n"
+            # Petición ajustada al nuevo formato:
+            request = f"GET /figure/{nombre_figura}\n"
             s.sendall(request.encode('utf-8'))
+            # Ahora recibiremos únicamente el cuerpo de la figura:
             response = b''
             while True:
                 parte = s.recv(BUFFER_SIZE)
@@ -82,10 +84,12 @@ class Tenedor:
                     break
                 response += parte
             s.close()
-            return response.decode('utf-8')
+            # Lo devolvemos como texto puro (sin encabezados HTTP)
+            return response.decode('utf-8', errors='ignore')
         except Exception as e:
             print(f"[Tenedor] Error al conectar con {nombre_servidor}: {e}")
             return None
+
 
     def shutdown(self):
         self.listening = False
