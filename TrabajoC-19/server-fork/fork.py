@@ -1,69 +1,73 @@
 #!/usr/bin/env python3
-# tenedor.py
+# fork.py (o el archivo donde esté la clase Tenedor)
 
 import socket
 import struct
 import threading
 import time
 
-MULTICAST_GROUP = '239.0.0.1'   # Debe coincidir con el grupo en C++
+MULTICAST_GROUP = '239.0.0.1'  # Igual que antes
 MULTICAST_PORT = 5353
 BUFFER_SIZE = 512
 
 class Tenedor:
     def __init__(self):
-        # Lista de servidores conocidos: { 'ServidorA': ('IP', puerto) }
         self.servidores = {}
         self.lock = threading.Lock()
-        # Socket para multicast
         self.mcast_sock = self._crear_socket_multicast()
-        # Arrancamos hilos para escuchar anuncios y mensajes de muerte
         self.listening = True
         threading.Thread(target=self._escuchar_multicast, daemon=True).start()
 
     def _crear_socket_multicast(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        # Permitir usar la misma dirección multiple veces
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(('', MULTICAST_PORT))  # escucha en cualquier interfaz
-        # Unirse al grupo multicast
+        sock.bind(('', MULTICAST_PORT))
         mreq = struct.pack("4sl", socket.inet_aton(MULTICAST_GROUP), socket.INADDR_ANY)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
         return sock
 
     def _escuchar_multicast(self):
         while self.listening:
-            data, addr = self.mcast_sock.recvfrom(BUFFER_SIZE)
-            mensaje = data.decode('utf-8').strip()
-            if mensaje.startswith("ANUNCIO_SERVIDOR:"):
-                # Formato esperado: "ANUNCIO_SERVIDOR:Nombre:IP:Puerto"
-                partes = mensaje.split(':')
-                if len(partes) == 4:
-                    nombre, ip, puerto = partes[1], partes[2], int(partes[3])
-                    with self.lock:
-                        if nombre not in self.servidores:
-                            self.servidores[nombre] = (ip, puerto)
-                            print(f"[Tenedor] Descubierto servidor {nombre} en {ip}:{puerto}")
-            elif mensaje.startswith("MORIRE:"):
-                # Formato: "MORIRE:ServidorA"
-                partes = mensaje.split(':')
-                if len(partes) == 2:
-                    nombre = partes[1]
-                    with self.lock:
-                        if nombre in self.servidores:
-                            del self.servidores[nombre]
-                            print(f"[Tenedor] Servidor {nombre} ha muerto y fue removido.")
-            # Si recibimos otro tipo de mensaje, lo ignoramos
+            try:
+                data, addr = self.mcast_sock.recvfrom(BUFFER_SIZE)
+                mensaje = data.decode('utf-8').strip()
+                
+                if mensaje.startswith("ANUNCIO_SERVIDOR:"):
+                    # Extraemos contenido después del prefijo
+                    contenido = mensaje[len("ANUNCIO_SERVIDOR:"):].strip()
+                    # Particionamos en máximo 3 partes: nombre, ip, figuras (las figuras van juntas en la última parte)
+                    partes = contenido.split(' ', 2)
+
+                    if len(partes) >= 2:
+                        nombre = partes[0]
+                        ip = partes[1]
+                        figuras = partes[2] if len(partes) == 3 else ""
+
+                        with self.lock:
+                            if nombre not in self.servidores:
+                                # Asignamos el puerto fijo multicast
+                                self.servidores[nombre] = (ip, MULTICAST_PORT)
+                                print(f"[Tenedor] Descubierto servidor {nombre} en {ip}:{MULTICAST_PORT} con figuras: {figuras}")
+
+                elif mensaje.startswith("MORIRE:"):
+                    partes = mensaje.split(':')
+                    if len(partes) == 2:
+                        nombre = partes[1]
+                        with self.lock:
+                            if nombre in self.servidores:
+                                del self.servidores[nombre]
+                                print(f"[Tenedor] Servidor {nombre} ha muerto y fue removido.")
+
+                # Otros mensajes se ignoran
+            except Exception as e:
+                print(f"[Tenedor] Error en escucha multicast: {e}")
+                time.sleep(0.1)
 
     def listar_servidores(self):
         with self.lock:
             return dict(self.servidores)
 
     def solicitar_figura(self, nombre_servidor, nombre_figura):
-        """
-        Se conecta por TCP al servidor (IP, puerto) para pedir la figura:
-        GET /figure/{nombre_figura}
-        """
         with self.lock:
             if nombre_servidor not in self.servidores:
                 print(f"[Tenedor] Servidor {nombre_servidor} no está disponible.")
@@ -73,10 +77,11 @@ class Tenedor:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((ip, puerto))
-            # Petición ajustada al nuevo formato:
+            nombre_figura = nombre_figura.strip()
+            print("voy a conectar, pidiendo figura...", nombre_figura, "-")
             request = f"GET /figure/{nombre_figura}\n"
             s.sendall(request.encode('utf-8'))
-            # Ahora recibiremos únicamente el cuerpo de la figura:
+
             response = b''
             while True:
                 parte = s.recv(BUFFER_SIZE)
@@ -84,12 +89,11 @@ class Tenedor:
                     break
                 response += parte
             s.close()
-            # Lo devolvemos como texto puro (sin encabezados HTTP)
+
             return response.decode('utf-8', errors='ignore')
         except Exception as e:
             print(f"[Tenedor] Error al conectar con {nombre_servidor}: {e}")
             return None
-
 
     def shutdown(self):
         self.listening = False
@@ -118,7 +122,7 @@ if __name__ == "__main__":
                 nombre_fig = input("Nombre de la figura: ").strip()
                 resp = tenedor.solicitar_figura(nombre_srv, nombre_fig)
                 if resp:
-                    print("=== Respuesta HTTP ===")
+                    print("=== Respuesta ===")
                     print(resp)
                 else:
                     print("No se recibió respuesta o hubo error.")
