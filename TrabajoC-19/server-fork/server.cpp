@@ -118,7 +118,7 @@ bool process_request(char* request, char* response) {
 
 
 void run_server(const std::string& broadcast_ip, VSocket* s1)  {
-    std::cout << "hola soy un hilo" << std::endl;
+    std::cout << "hola soy un hilo planeo escuhar de la ip: " << broadcast_ip << std::endl;
     // 1) Configuración Multicast UDP
     int udpSock = socket(AF_INET, SOCK_DGRAM, 0);
     if (udpSock < 0) {
