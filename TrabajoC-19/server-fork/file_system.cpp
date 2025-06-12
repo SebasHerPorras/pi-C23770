@@ -367,9 +367,17 @@ void FileSystem::escribir_bloque(int bloque_num, const char* datos) {
 char* FileSystem::find_figura(const std::string& nombre_figura) {
     short puntero = this->find_figura_post(nombre_figura);
     if (puntero == -1) {
-        std::cerr << "No se encontró la figura: " << nombre_figura << std::endl;
-
-        return this->find_figura_error();  // Retorna nullptr si no se encuentra la figura 
+        // std::cerr << "No se encontró la figura: " << nombre_figura << std::endl;
+        // return formato de http error 404 not found
+        // Retornar un mensaje de error HTTP como char*
+        // std::cout << "no se encontró la figura: " << nombre_figura << std::endl;
+        char error_msg[] = "404 Not Found\r\n\r\nFigura no encontrada";
+        char* error_response = new char[strlen(error_msg) + 1];
+        std::strcpy(error_response, error_msg);
+        return error_response;
+        
+        // si se quiere retornar una figura no encontrada, se puede usar:
+        // return this->find_figura_error();  // Retorna nullptr si no se encuentra la figura 
         // return nullptr;  // Retorna nullptr si no se encuentra la figura
     }
     char* figura;

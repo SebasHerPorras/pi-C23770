@@ -13,10 +13,10 @@ BINDIR := exec
 VPATH := $(SRC)
 
 # Objetos (ajustados según nombres de archivos que mencionaste)
-OBJS_CLIENT := $(OBJDIR)/MirrorClient.o $(OBJDIR)/VSocket.o $(OBJDIR)/Socket.o
+OBJS_CLIENT := $(OBJDIR)/fork.o $(OBJDIR)/VSocket.o $(OBJDIR)/Socket.o
 OBJS_SERVER := $(OBJDIR)/server.o $(OBJDIR)/VSocket.o $(OBJDIR)/Socket.o $(OBJDIR)/file_system.o
 
-TARGETS := $(BINDIR)/MirrorClient.out $(BINDIR)/server.out
+TARGETS := $(BINDIR)/server.out $(BINDIR)/fork.out
 
 # Regla principal
 all: $(TARGETS)
@@ -33,7 +33,7 @@ $(OBJDIR)/%.o: %.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 # Enlazado de ejecutables
-$(BINDIR)/MirrorClient.out: $(OBJS_CLIENT) | $(BINDIR)
+$(BINDIR)/fork.out: $(OBJS_CLIENT) | $(BINDIR)
 	$(CXX) $^ -o $@
 
 $(BINDIR)/server.out: $(OBJS_SERVER) | $(BINDIR)
