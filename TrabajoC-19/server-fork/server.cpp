@@ -224,7 +224,7 @@
         FD_SET(udpSock, &readfds);
 
         struct timeval timeout;
-        timeout.tv_sec = 5;  // Esperar máximo 5 segundos
+        timeout.tv_sec = 15;  // Esperar máximo 5 segundos
         timeout.tv_usec = 0;
 
         int ready = select(udpSock + 1, &readfds, NULL, NULL, &timeout);
@@ -276,7 +276,7 @@
          "172.16.123.63",
          "172.16.123.79",
          "172.16.123.111",
-         "127.0.0.1"  // Localhost para pruebas
+         "10.255.255.254"  // Localhost para pruebas broadcast
      };
  
      // Inicializar socket principal

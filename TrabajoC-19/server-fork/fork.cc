@@ -47,7 +47,7 @@ void signal_handler(int signal) {
 void udp_listener(const std::string& listen_ip) {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0) {
-        std::cerr << "[Listener UDP] Error creando socket para IP " << listen_ip << ": " << strerror(errno) << std::endl;
+        std::cerr << "\n[Listener UDP] Error creando socket para IP " << listen_ip << ": " << strerror(errno) << std::endl;
         return;
     }
     
@@ -316,7 +316,7 @@ int main() {
         "172.16.123.63",
         "172.16.123.79",
         "172.16.123.111",
-        "127.0.0.1"
+        "10.255.255.254"
     };
 
     // Hilos UDP para escuchar anuncios
