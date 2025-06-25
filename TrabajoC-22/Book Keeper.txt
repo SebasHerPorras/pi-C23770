@@ -1,0 +1,18 @@
+Servidor Book-keeper (Tenedor)
+
+Introducción
+
+El servidor Book-keeper (tenedor) es responsable de coordinar la comunicación entre los clientes HTTP y los servidores de figuras ASCII. Su objetivo principal es mantener una tabla de ruteo actualizada que relacione cada figura con el servidor que la almacena, y utilizar esa información para reenviar solicitudes y responder a los clientes.
+
+---
+
+Almacenamiento de datos de otros servidores
+
+El Book-keeper almacena una tabla de ruteo, que es una estructura tipo map<string, string> donde:
+
+- La clave es el nombre de la figura (por ejemplo, "gato", "sombrilla").
+- El valor es la dirección IP del servidor que ofrece dicha figura.
+
+Esta tabla está protegida mediante un std::mutex llamado tabla_mutex, que asegura exclusión mutua cuando múltiples hilos acceden o modifican la tabla.
+
+---

@@ -36,32 +36,44 @@
   *  @param     bool ipv6: if we need a IPv6 socket
   *
  **/
-void VSocket::BuildSocket( char t, bool IPv6 ){
-
-
+void VSocket::BuildSocket(char t, bool IPv6)
+{
    this->IPv6 = IPv6;
    this->type = t;
-  
-   int st;
-   int domain = IPv6 ? AF_INET6 : AF_INET;  // IPv4 o IPv6
+
+   int domain = IPv6 ? AF_INET6 : AF_INET; // IPv4 o IPv6
    int sockType;
 
-   if (t == 's') {
-       sockType = SOCK_STREAM;  // stream (TCP)
-   } else if (t == 'd') {
-       sockType = SOCK_DGRAM;  // DGram (UDP)
-   } else {
-       std::cout << "estás usando: " << t << std::endl;
-       throw std::invalid_argument("VSocket::BuildSocket: Tipo de socket inválido. Use 's' para STREAM (TCP) o 'd' para DATAGRAM (UDP)");
+   if (t == 's')
+   {
+      sockType = SOCK_STREAM; // stream (TCP)
+   }
+   else if (t == 'd')
+   {
+      sockType = SOCK_DGRAM; // DGram (UDP)
+   }
+   else
+   {
+      std::cout << "estás usando: " << t << std::endl;
+      throw std::invalid_argument("VSocket::BuildSocket: Tipo de socket inválido. Use 's' para STREAM (TCP) o 'd' para DATAGRAM (UDP)");
    }
 
-   int protocol = 0;  // 0 para protocolo por defecto
+   int protocol = 0; // 0 para protocolo por defecto
 
-   st = socket(domain, sockType, protocol);
-   if (st == -1) {
-       throw std::runtime_error("VSocket::BuildSocket: error al crear el socket");
+   int st = socket(domain, sockType, protocol);
+   if (st == -1)
+   {
+      throw std::runtime_error("VSocket::BuildSocket: error al crear el socket");
    }
-   
+
+   // Esta parte soluciona el problema de "Address already in use"
+   int yes = 1;
+   if (setsockopt(st, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0)
+   {
+      perror("setsockopt(SO_REUSEADDR)");
+      throw std::runtime_error("VSocket::BuildSocket: no se pudo establecer SO_REUSEADDR");
+   }
+
    this->idSocket = st;
    // std::cout << "\nidsocket " << st  << "  " << IPv6 << std::endl;
 }
@@ -161,45 +173,31 @@ int VSocket::EstablishConnection( const char * host, const char * service ) {
   *  Links the calling process to a service at port
   *
  **/
- int VSocket::Bind(int port) {
-   struct sockaddr_in addr4;
-   struct sockaddr* addr;
+int VSocket::Bind( int port ) {
+   
+  struct sockaddr_in addr4;
+  struct sockaddr *addr;
+  // socklen_t addrlen;
+   
+  // Inicializa la estructura de dirección
+  memset(&addr4, 0, sizeof(addr4));
+  addr4.sin_family = AF_INET;
+  addr4.sin_port = htons(port);
+  
+  //  size del sockaddr y cast generico a sockaddr
+  addr = (struct sockaddr*)&addr4;
+  socklen_t addrlen = sizeof(addr4);
 
-   // Inicializa la estructura de dirección
-   memset(&addr4, 0, sizeof(addr4));
-   addr4.sin_family = AF_INET;
-   addr4.sin_addr.s_addr = htonl(INADDR_ANY);  // Escuchar en todas las interfaces
-   addr4.sin_port = htons(port);
+  // Llama al sistema para enlazar el socket
+  int st =  bind(idSocket, addr,addrlen);
 
-   addr = (struct sockaddr*)&addr4;
-   socklen_t addrlen = sizeof(addr4);
-
-   // Permitir reutilización de dirección (SO_REUSEADDR)
-   int reuse = 1;
-   if (setsockopt(idSocket, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
-       std::cerr << "Error en setsockopt SO_REUSEADDR: " << strerror(errno) << " (" << errno << ")" << std::endl;
-       throw std::runtime_error("VSocket::Bind: Error en SO_REUSEADDR");
-   }
-
-   // (Opcional) Reutilización de puerto si el sistema lo permite
-   #ifdef SO_REUSEPORT
-   if (setsockopt(idSocket, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse)) < 0) {
-       std::cerr << "Error en setsockopt SO_REUSEPORT: " << strerror(errno) << " (" << errno << ")" << std::endl;
-       // Esto no lanza excepción, porque no es obligatorio en todos los SO
-   }
-   #endif
-
-   // Llama al sistema para enlazar el socket
-   int st = bind(idSocket, addr, addrlen);
-
-   if (st == -1) {
-       std::cerr << "Error en bind: " << strerror(errno) << " (" << errno << ")" << std::endl;
-       throw std::runtime_error("VSocket::Bind: Error al enlazar el socket");
+  if (st == -1) {
+      std::cerr << "Error en bind: " << strerror(errno) << " (" << errno << ")" << std::endl;
+      throw std::runtime_error("VSocket::Bind: Error al enlazar el socket");
    }
 
    return st;
 }
-
 
 
 /**
@@ -315,9 +313,16 @@ size_t VSocket::recvFrom( void * buffer, size_t size, void * addr ) {
     // Llamada al sistema para recibir datos
     ssize_t bytesReceived = recvfrom(idSocket, buffer, size, 0, (struct sockaddr*)srcAddr, &addrLen);
 
-    if (bytesReceived == -1) {
-        std::cerr << "Error en recvfrom: " << strerror(errno) << " (" << errno << ")" << std::endl;
-        throw std::runtime_error("VSocket::recvFrom: Error al recibir datos");
+    if (bytesReceived == -1)
+    {
+       if (errno == EAGAIN || errno == EWOULDBLOCK)
+       {
+          // No se recibieron datos dentro del tiempo — no es un error crítico
+          return 0;
+       }
+
+       std::cerr << "Error en recvfrom: " << strerror(errno) << " (" << errno << ")" << std::endl;
+       throw std::runtime_error("VSocket::recvFrom: Error al recibir datos");
     }
 
     return static_cast<size_t>(bytesReceived);
